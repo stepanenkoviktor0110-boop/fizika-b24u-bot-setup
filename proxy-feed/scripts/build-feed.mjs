@@ -9,6 +9,15 @@ const SOURCE_URL = process.env.FEED_SOURCE_URL
 const LOCAL_PATH = resolve(__dirname, '../../old/artifacts/domoplaner-feed-original-2026-05-09.yml');
 const OUTPUT_PATH = resolve(__dirname, '../../public/feed.xml');
 
+// Public deep-link to a flat in Domoplaner catalog widget. The catalog token
+// `rRFkg1` is the same token the official project sites (moiseenko10.ru and
+// siblings) embed, so it's safe to expose. `flat_id` matches <offer id="...">
+// 1:1 across all four ЖК (Talento, Остров Первых, Моисеенко 10, VIDI),
+// so no project-to-token mapping is needed. Replaces the agent-portal URL
+// (booking.fizika.group/flat/<id>/) which redirects unauthenticated visitors
+// to a login page — useless for the public chat widget audience.
+const PUBLIC_CATALOG_URL = 'https://domoplaner.ru/catalog/424/rRFkg1/plans/?flat_id=';
+
 const ROOM_SYNONYMS = {
   0: 'студия, квартира-студия, студийная квартира, студии',
   1: '1-комнатная, однокомнатная, однушка, 1к, 1-комн, 1-к',
@@ -333,6 +342,7 @@ async function main() {
       offer.description = newDescription;
       enrichedCount++;
     }
+    offer.url = `${PUBLIC_CATALOG_URL}${offer['@_id']}`;
   }
 
   // Replace offers list with the filtered set.

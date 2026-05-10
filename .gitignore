@@ -1,0 +1,58 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+secrets/
+.secrets/
+*api-key*
+*apikey*
+*secret*
+
+# Local-only working directories (never published)
+.claude/
+old/
+.playwright-mcp/
+
+# Local-only working files
+next-session-prompt.md
+.tmp_*
+snapshot-*.yml
+snapshot-*.yaml
+*.png
+*.jpg
+*.jpeg
+CLAUDE.md
+b24u-guidelines-*.yml
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Generated proxy feed (built by .github/workflows/build-feed.yml, published to gh-pages branch)
+/public/

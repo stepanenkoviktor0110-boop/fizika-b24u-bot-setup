@@ -1,0 +1,17 @@
+{
+  "name": "fizika-feed-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Enriches Domoplaner YML feed with synonyms and natural-language metadata so B24U RAG retrieves apartment cards higher than long PDF descriptions.",
+  "scripts": {
+    "build": "node scripts/build-feed.mjs",
+    "dry-run": "LOCAL=1 node scripts/build-feed.mjs"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

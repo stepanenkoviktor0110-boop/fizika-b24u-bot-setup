@@ -1,0 +1,55 @@
+name: Build proxy feed
+
+on:
+  schedule:
+    # Source feed updates ~twice a day; B24U syncs every 12h. We rebuild every 6h for headroom.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'proxy-feed/**'
+      - '.github/workflows/build-feed.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-feed
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: proxy-feed/package-lock.json
+
+      - name: Install
+        working-directory: proxy-feed
+        run: npm ci
+
+      - name: Build feed
+        working-directory: proxy-feed
+        env:
+          BOOKING_FIZIKA_LOGIN: ${{ secrets.BOOKING_FIZIKA_LOGIN }}
+          BOOKING_FIZIKA_PASSWORD: ${{ secrets.BOOKING_FIZIKA_PASSWORD }}
+        run: npm run build
+
+      - name: Publish to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./public
+          keep_files: false
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'chore(feed): rebuild ${{ github.event.head_commit.message || ''scheduled'' }} [skip ci]'

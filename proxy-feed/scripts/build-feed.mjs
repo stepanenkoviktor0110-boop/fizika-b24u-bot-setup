@@ -94,7 +94,13 @@ function areaFromName(name) {
   const m = String(name).match(/(\d+(?:[.,]\d+)?)\s*м²/);
   if (!m) return null;
   const v = m[1].replace(',', '.');
-  return `площадь ${v} квадратных метров, ${v} м²`;
+  // Agents query in rounded m² ("двушка 77 м² 7 этаж"), source feed carries
+  // precise decimals ("77.44 м²"). Append rounded value so semantic retrieval
+  // matches whole-number queries against per-flat cards instead of bouncing
+  // them up to long manual descriptions.
+  const rounded = Math.round(parseFloat(v));
+  const roundedLabel = Number.isFinite(rounded) && String(rounded) !== v ? `, ${rounded} м²` : '';
+  return `площадь ${v} квадратных метров, ${v} м²${roundedLabel}`;
 }
 
 function roomsLabel(rooms, name) {

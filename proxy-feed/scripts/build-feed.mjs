@@ -161,6 +161,17 @@ function buildEnrichedDescription(offer) {
 
   if (offer.adress) parts.push(`адрес: ${offer.adress}`);
 
+  // Picture from Domoplaner is the actual floor plan of the apartment.
+  // B24U RAG indexer drops <picture> tags from offers — so the bot has no way
+  // to cite a real plan URL and hallucinates a fake media.p9t.ru one instead.
+  // Surfacing the URL inside <description> guarantees it enters the RAG Content
+  // chunk, and the model can quote it verbatim when an agent asks for the plan.
+  const pictures = Array.isArray(offer.picture) ? offer.picture : (offer.picture ? [offer.picture] : []);
+  const pictureUrls = pictures.map(p => typeof p === 'string' ? p.trim() : '').filter(Boolean);
+  if (pictureUrls.length) {
+    parts.push(`Планировка квартиры (изображение): ${pictureUrls[0]}`);
+  }
+
   // Append original description at the end, if any
   if (offer.description) parts.push(String(offer.description).trim());
 

@@ -161,6 +161,17 @@ function buildEnrichedDescription(offer) {
 
   if (offer.adress) parts.push(`адрес: ${offer.adress}`);
 
+  // Apartment number lives inside the source description as "№123" and isn't
+  // promoted into a separate field. RAG vector search struggles to bind a
+  // bare 3-digit token to queries like "квартира №115" — adding explicit
+  // lexical phrases (квартира №N, номер квартиры N, лот №N) widens the hit
+  // surface so retrieval can pin the exact apartment when the agent names it.
+  const aptNumMatch = String(offer.description || '').match(/№\s*(\d+)/);
+  if (aptNumMatch) {
+    const n = aptNumMatch[1];
+    parts.push(`квартира №${n}, номер квартиры ${n}, лот №${n}, лот номер ${n}`);
+  }
+
   // Picture from Domoplaner is the actual floor plan of the apartment.
   // B24U RAG indexer drops <picture> tags from offers — so the bot has no way
   // to cite a real plan URL and hallucinates a fake media.p9t.ru one instead.

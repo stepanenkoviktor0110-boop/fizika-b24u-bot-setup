@@ -161,6 +161,14 @@ function buildEnrichedDescription(offer) {
 
   if (offer.adress) parts.push(`адрес: ${offer.adress}`);
 
+  // Partner-portal listing URL of this flat. Surfacing it inside <description>
+  // is the only way to make it enter Flynn's URL whitelist: Flynn builds the
+  // whitelist from text bodies of KB entries, and the <url> field of a feed
+  // offer does not feed into it. Verified 2026-05-18: a TEXT KB entry containing
+  // `https://booking.fizika.group/flat/3842/` makes the bot keep that URL in
+  // answers, while the same URL coming only from the feed's <url> gets stripped.
+  if (offer.url) parts.push(`Карточка лота для агента: ${offer.url}`);
+
   // Picture from Domoplaner is the actual floor plan of the apartment.
   // B24U RAG indexer drops <picture> tags from offers — so the bot has no way
   // to cite a real plan URL and hallucinates a fake media.p9t.ru one instead.

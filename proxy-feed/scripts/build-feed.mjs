@@ -135,6 +135,22 @@ function renovationLabel(renovation) {
 function buildEnrichedDescription(offer) {
   const parts = [];
 
+  // FACT PREFIX (vesta-style, проверено 2026-05-22). Дублируем name, price, URL
+  // партнёрской карточки в самое начало description — Flynn/RAG передаёт LLM
+  // только description-чанк, структурные поля <url>/<price> в LLM-контекст
+  // не попадают целиком. Явные лейблы «Название/Цена/Ссылка на карточку»
+  // помогают модели привязать URL к конкретному лоту, иначе она цитирует
+  // все остальные поля и забывает URL (воспроизведено на запросе «расскажи
+  // про лот 480573»).
+  const factLines = [];
+  if (offer.name) factLines.push(`Название: ${String(offer.name).trim()}.`);
+  if (offer.price) {
+    const p = Number(offer.price);
+    if (Number.isFinite(p) && p > 0) factLines.push(`Цена: ${p} руб.`);
+  }
+  if (offer.url) factLines.push(`Ссылка на карточку: ${offer.url}`);
+  if (factLines.length) parts.push(factLines.join(' '));
+
   const rooms = roomsLabel(offer.rooms, offer.name);
   const complex = complexLabel(offer['building-name']);
   if (rooms && complex) {

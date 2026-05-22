@@ -132,8 +132,59 @@ function renovationLabel(renovation) {
   return key ? RENOVATION_LABELS[key] : `отделка: ${renovation}`;
 }
 
+// Canonical fact-prefix concentrates top-discriminating tokens (ЖК, rooms label,
+// price, area, floor, offer id) in the first ~120 chars of <description>. BM25
+// length normalization gives early tokens disproportionate weight, and Flynn's
+// retrieval is lexical — so a dense prefix beats the same tokens spread across
+// the body. Format: `Talento • Двухкомнатная (двушка) • 33.26 млн ₽ • 72.47 м² • эт.3 • № 318152.`
+function shortRoomsTag(rooms, name) {
+  const n = parseInt(rooms, 10);
+  const map = { 0: 'Студия', 1: 'Однокомнатная (однушка)', 2: 'Двухкомнатная (двушка)', 3: 'Трёхкомнатная (трёшка)', 4: 'Четырёхкомнатная' };
+  if (!Number.isNaN(n) && map[n]) return map[n];
+  if (n >= 5) return 'Пентхаус';
+  if (name && /студи/i.test(name)) return 'Студия';
+  if (name && /пентхаус|penthouse/i.test(name)) return 'Пентхаус';
+  return null;
+}
+function shortComplexTag(buildingName) {
+  if (!buildingName) return null;
+  const n = String(buildingName).toLowerCase();
+  if (n.includes('talento')) return 'Talento';
+  if (n.includes('vidi')) return 'VIDI';
+  if (n.includes('остров')) return 'Остров Первых';
+  if (n.includes('моисеенко')) return 'Моисеенко 10';
+  return buildingName;
+}
+function shortPriceTag(price) {
+  if (!price) return null;
+  const n = Number(price);
+  if (!Number.isFinite(n)) return null;
+  const mln = (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '');
+  return `${mln} млн ₽`;
+}
+function shortAreaTag(name) {
+  if (!name) return null;
+  const m = String(name).match(/(\d+(?:[.,]\d+)?)\s*м²/);
+  if (!m) return null;
+  return `${m[1].replace(',', '.')} м²`;
+}
+function buildFactPrefix(offer) {
+  const facts = [
+    shortComplexTag(offer['building-name']),
+    shortRoomsTag(offer.rooms, offer.name),
+    shortPriceTag(offer.price),
+    shortAreaTag(offer.name),
+    offer.floor ? `эт.${offer.floor}` : null,
+    offer['@_id'] ? `№ ${offer['@_id']}` : null,
+  ].filter(Boolean);
+  return facts.length ? facts.join(' • ') : null;
+}
+
 function buildEnrichedDescription(offer) {
   const parts = [];
+
+  const factPrefix = buildFactPrefix(offer);
+  if (factPrefix) parts.push(factPrefix);
 
   const rooms = roomsLabel(offer.rooms, offer.name);
   const complex = complexLabel(offer['building-name']);

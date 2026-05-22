@@ -353,12 +353,7 @@ async function main() {
       offer.description = newDescription;
       enrichedCount++;
     }
-    // Keep partner-portal URL from Domoplaner as-is. Was overridden to a
-    // public Domoplaner deep-link in c925e9f for a B2C scenario; reverted
-    // 2026-05-22 because Fizika consumes this feed in a B2B agent-only
-    // chat (Flynn-ai) — the bot must cite booking.fizika.group/flat/<id>/
-    // which is the partner listing URL agents are already logged into.
-    // If a B2C variant is needed later, build a separate output.
+    offer.url = `${PUBLIC_CATALOG_URL}${offer['@_id']}`;
   }
 
   // Replace offers list with the filtered set.

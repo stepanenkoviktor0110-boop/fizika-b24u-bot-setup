@@ -98,6 +98,22 @@ function priceProse(price) {
   return `цена ${mln} млн рублей, ${n.toLocaleString('ru-RU')} ₽`;
 }
 
+// Flynn retrieval is lexical — it does not parse "до 40 млн" as price≤40000000.
+// To make budget-bounded queries hit the right offers, we embed the textual price
+// bands ("до 35 млн", "до 40 млн", "до 50 млн") into description. Each offer gets
+// the next 3 round thresholds from a fixed grid, so "двушки Talento до 40 млн"
+// matches a 33.26 млн offer via the literal "до 40 млн" token.
+const PRICE_THRESHOLDS_MLN = [15, 20, 25, 30, 35, 40, 50, 60, 75, 90, 100, 110];
+function priceBandSynonyms(price) {
+  if (!price) return null;
+  const n = Number(price);
+  if (!Number.isFinite(n)) return null;
+  const mln = n / 1_000_000;
+  const bands = PRICE_THRESHOLDS_MLN.filter(t => t >= mln).slice(0, 3);
+  if (!bands.length) return null;
+  return `бюджет: ${bands.map(b => `до ${b} млн`).join(', ')}`;
+}
+
 function areaFromName(name) {
   if (!name) return null;
   const m = String(name).match(/(\d+(?:[.,]\d+)?)\s*м²/);
@@ -206,6 +222,9 @@ function buildEnrichedDescription(offer) {
 
   const price = priceProse(offer.price);
   if (price) parts.push(price);
+
+  const priceBand = priceBandSynonyms(offer.price);
+  if (priceBand) parts.push(priceBand);
 
   const renovation = renovationLabel(offer.renovation);
   if (renovation) parts.push(renovation);

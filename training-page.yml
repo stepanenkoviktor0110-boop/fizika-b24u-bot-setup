@@ -1,0 +1,102 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - region "Notifications (F8)":
+      - list
+    - region "Notifications alt+T"
+    - generic [ref=e6]:
+      - generic [ref=e10]:
+        - link "FLYNN" [ref=e12] [cursor=pointer]:
+          - /url: /
+          - img "FLYNN" [ref=e13]
+        - generic [ref=e15]:
+          - generic [ref=e16]: Навигация
+          - list [ref=e18]:
+            - listitem [ref=e19]:
+              - link "Главная" [ref=e20] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Главная
+            - listitem [ref=e28]:
+              - link "Сообщения 15" [ref=e29] [cursor=pointer]:
+                - /url: /dashboard/messages
+                - img [ref=e31]
+                - generic [ref=e33]: Сообщения
+                - generic [ref=e34]: "15"
+            - listitem [ref=e35]:
+              - link "Обучение ИИ" [ref=e36] [cursor=pointer]:
+                - /url: /dashboard/training
+                - img [ref=e38]
+                - generic [ref=e41]: Обучение ИИ
+            - listitem [ref=e42]:
+              - link "Уведомления" [ref=e43] [cursor=pointer]:
+                - /url: /dashboard/notifications
+                - img [ref=e45]
+                - generic [ref=e48]: Уведомления
+            - listitem [ref=e49]:
+              - link "Установка" [ref=e50] [cursor=pointer]:
+                - /url: /dashboard/install
+                - img [ref=e52]
+                - generic [ref=e54]: Установка
+            - listitem [ref=e55]:
+              - link "Тариф" [ref=e56] [cursor=pointer]:
+                - /url: /dashboard/billing
+                - img [ref=e58]
+                - generic [ref=e60]: Тариф
+      - generic [ref=e61]:
+        - banner [ref=e62]:
+          - generic [ref=e63]:
+            - button "Toggle Sidebar" [ref=e64] [cursor=pointer]:
+              - img
+              - generic [ref=e65]: Toggle Sidebar
+            - heading "Обучение ИИ" [level=1] [ref=e185]
+          - button "ST" [ref=e67] [cursor=pointer]:
+            - generic [ref=e69]: ST
+        - main [ref=e70]:
+          - generic [ref=e186]:
+            - generic [ref=e188]:
+              - heading "Обучение ИИ" [level=1] [ref=e189]
+              - paragraph [ref=e190]: База знаний (тексты, FAQ, сканирование сайта) и поведение ассистента.
+            - generic [ref=e191]:
+              - tablist [ref=e192]:
+                - tab "База знаний" [selected] [ref=e193] [cursor=pointer]:
+                  - img [ref=e194]
+                  - text: База знаний
+                - tab "Поведение ассистента" [ref=e196] [cursor=pointer]:
+                  - img [ref=e197]
+                  - text: Поведение ассистента
+              - tabpanel "База знаний" [ref=e199]:
+                - generic [ref=e200]:
+                  - button "Очистить кеш" [ref=e202] [cursor=pointer]:
+                    - img
+                    - text: Очистить кеш
+                  - generic [ref=e203]:
+                    - tablist [ref=e205]:
+                      - tab "Сканирование" [selected] [ref=e206] [cursor=pointer]:
+                        - img [ref=e207]
+                        - text: Сканирование
+                      - tab "Текст" [ref=e210] [cursor=pointer]:
+                        - img [ref=e211]
+                        - text: Текст
+                      - tab "Вопрос-ответ" [ref=e214] [cursor=pointer]:
+                        - img [ref=e215]
+                        - text: Вопрос-ответ
+                      - tab "Фид" [ref=e218] [cursor=pointer]:
+                        - img [ref=e219]
+                        - text: Фид
+                    - tabpanel "Сканирование" [ref=e223]:
+                      - generic [ref=e224]:
+                        - generic [ref=e225]:
+                          - text: URL для сканирования
+                          - textbox "https://example.com" [ref=e226]
+                        - generic [ref=e227]:
+                          - generic [ref=e228] [cursor=pointer]:
+                            - radio "Одна страница" [checked] [ref=e229]
+                            - text: Одна страница
+                          - generic [ref=e230] [cursor=pointer]:
+                            - radio "Несколько страниц" [ref=e231]
+                            - img [ref=e232]
+                            - text: Несколько страниц
+                        - button "Сканировать" [disabled]
+                  - heading "Обучающие данные" [level=2] [ref=e236]
+                  - paragraph [ref=e237]: Нет данных для обучения
+  - generic [ref=e184]: "0"

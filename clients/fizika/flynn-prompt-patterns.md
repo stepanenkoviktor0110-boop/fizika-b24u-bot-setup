@@ -108,3 +108,151 @@
 node proxy-feed/scripts/flynn-regression-test.mjs
 ```
 Прогоняет 10 запросов через `widget-chat` API. Бейзлайн: 8/10 PASS. Запускать после любой правки промпта в Flynn-дашборде или фид-builder'а.
+
+---
+
+## 5. Архитектура Flynn — что выяснено через PostgREST (2026-05-23)
+
+Flynn-кабинет = SPA + Supabase PostgREST API на `https://flynn-ai.ru/rest/v1/*`. Авторизация — JWT в `Authorization: Bearer …`, плюс `apikey` (анонимный supabase-ключ). Токен лежит в `localStorage["sb-flynn-ai-auth-token"]`.
+
+### Известные таблицы
+
+| Таблица | Что лежит | Ключевые поля |
+|---|---|---|
+| `projects` | Проект-бот | `id`, `user_id`, `name`, `url`, `api_key` |
+| `widget_settings` | Настройки бота | `project_id`, `system_prompt` (maxLength=4000), `welcome_message`, `assistant_name`, `funnel_enabled`, `funnel_contact_cta` ("Оставьте телефон..."), `quick_buttons[]`, `response_style` ("normal"), `language`, `consent_url`, `notify_*`, `crm_webhook_url`, `telegram_*`, `instagram_*`, `avito_*` |
+| `training_data` | KB-записи | `project_id`, `type` ("text"/"faq"/...), `content`, `question`, `answer` |
+| `messages` | История сообщений | `project_id`, `visitor_id`, `role`, `content`, `funnel_stage`, `has_cta`, `is_error`, `token_count`, `response_time_ms` |
+| `conversations` | Диалоги | `outcome`, `cta_shown/clicked`, `escalation_reason`, `operator_mode`, `ask_mode`, `billing_session_count` |
+| `subscriptions` | Тариф | `plan`, `status`, `expires_at` |
+
+Не найдено (тестировано на 404): `bots, sites, widgets, settings, project_settings, bot_settings, fallback_messages, default_messages, templates, intent_responses, fallbacks, kb_entries, knowledge_base, documents, prompts, message_templates, no_match_messages`.
+
+### Что значит «backend-fallback C2»
+
+Реальный ответ бота на C2 сохранён в `messages` как:
+```
+role: assistant
+content: "К сожалению, по вашему запросу сейчас нет подходящих вариантов. Оставьте контакт — менеджер подберёт варианты вручную и свяжется с вами."
+token_count: 33
+response_time_ms: 1054
+is_error: false
+```
+
+Т.е. это **полноценный ответ LLM** (33 токена, 1 сек, не ошибка), а не подмена. Значит модель **получает** контекст и **сама** генерирует этот текст по какому-то шаблонному правилу. Источник:
+
+- **Не из `widget_settings.funnel_contact_cta`** — там другая формулировка («оставьте ваш телефон»).
+- **Не из `training_data`** — никаких KB-записей с такой формулировкой нет.
+- **Скорее всего из системного промпта на стороне `widget-chat` edge-function** — Flynn добавляет «системную обвязку» перед `system_prompt` пользователя, в которой есть такое же fallback-правило. И когда RAG-выдача для конкретного фильтра пуста, эта обвязка побеждает пользовательский промпт.
+
+Гипотеза подтверждается косвенно: формулировка дословно совпадает с типичными SaaS-чатботскими fallback'ами и с `widget_settings.funnel_contact_cta` пересекается по смыслу — Flynn видимо использует похожий шаблон для «no relevant context» состояний.
+
+### Что можно сделать с правами user-токена (без участия Flynn-команды)
+
+- **Читать/писать `widget_settings.system_prompt`** напрямую через PostgREST, обходя UI (maxLength=4000 — это лимит UI, в БД лимита нет). Полезно если нужен промпт >4000 знаков.
+- **Добавлять `training_data`** записи через POST `/rest/v1/training_data` — это позволяет лечить C2 через KB-обход (написать карточку «Отделка в Моисеенко 10 = White Box = почти под ключ», бот её процитирует и не уйдёт в fallback).
+- **Читать `messages` и `conversations`** для аналитики качества бота — например, сколько процентов диалогов закончились fallback'ом.
+
+### Что НЕЛЬЗЯ через PostgREST
+
+- Изменить логику edge-function `widget-chat` (которая и формирует fallback) — это бэкенд Flynn.
+- Отключить fallback — поля нет в `widget_settings`.
+
+### Practical implication для C2
+
+**Прямой фикс невозможен без Flynn-команды.** Workaround только через KB: создать `training_data` записи которые подхватываются на запросы про «чистовую отделку в Моисеенко» и поднимают релевантность RAG так, чтобы edge-function не сваливался в fallback.
+
+Поле: `widget_settings.system_prompt` — maxLength HTML-уровня 4000 знаков, но **в БД лимита нет**. Через PostgREST можно записать больше.
+
+---
+
+## 6. Использование PostgREST для администрирования
+
+### Получить токен из браузера
+```js
+JSON.parse(localStorage.getItem('sb-flynn-ai-auth-token')).access_token
+```
+
+### Apikey
+Анонимный supabase-ключ. Видно в Network-запросах к `flynn-ai.ru/rest/v1/*`, заголовок `apikey`.
+
+### Прочитать промпт
+```bash
+curl 'https://flynn-ai.ru/rest/v1/widget_settings?select=system_prompt&project_id=eq.c23660f9-0402-47a4-b0fd-2c38f26950f7' \
+  -H "apikey: $APIKEY" -H "Authorization: Bearer $TOKEN"
+```
+
+### Записать промпт (без UI-лимита 4000)
+```bash
+curl -X PATCH 'https://flynn-ai.ru/rest/v1/widget_settings?project_id=eq.c23660f9-0402-47a4-b0fd-2c38f26950f7' \
+  -H "apikey: $APIKEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d '{"system_prompt":"..."}'
+```
+
+### Добавить KB-запись
+```bash
+curl -X POST 'https://flynn-ai.ru/rest/v1/training_data' \
+  -H "apikey: $APIKEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"project_id":"c23660f9-0402-47a4-b0fd-2c38f26950f7","type":"text","content":"..."}'
+```
+
+### Слить историю диалогов для оффлайн-анализа
+```bash
+curl 'https://flynn-ai.ru/rest/v1/messages?select=*&project_id=eq.c23660f9-0402-47a4-b0fd-2c38f26950f7&order=created_at.desc&limit=500' \
+  -H "apikey: $APIKEY" -H "Authorization: Bearer $TOKEN" > messages-dump.json
+```
+
+---
+
+## 7. Лимиты UI кабинета (обнаружены при правках)
+
+- `widget_settings.system_prompt`: `maxLength=4000` в UI (в БД лимита нет → можно обойти через PostgREST).
+- Прогрев индекса: после «Очистить кеш» баннер «Индекс прогревается. Прошло N сек» висит до первого успешного ответа ИИ. На свежеочищенном индексе можно ускорить — послать ping-запрос через widget-chat API.
+- `response_style`: значения "normal" | (вероятно "compact" и др., не проверял через UI).
+
+## 8. Ответный кеш Flynn — pin по точной строке запроса
+
+Flynn-runtime кеширует ответы по **точной формулировке запроса** (включая пунктуацию). Ответ виден через поле `cached: true` в JSON-ответе `widget-chat`.
+
+**Следствия:**
+- Один раз сгенерированный плохой ответ (например, fallback) висит до TTL.
+- После правки промпта или KB старые формулировки **не пересоздаются** — только новые.
+- Любая правка (буква/символ/пробел/`?`) триггерит новый промпт→ответ→кеш.
+
+**Используется в тестах:** `proxy-feed/scripts/flynn-regression-test.mjs` намеренно использует формулировки с `?`-суффиксом и слегка иными словами, чтобы каждый раз ловить свежую генерацию, а не закешированный старый ответ.
+
+**Как очистить:** ждать TTL или менять формулировку. Кнопка «Очистить кеш» в Training чистит **индекс**, не ответный кеш.
+
+## 9. KB-обходка backend-fallback Flynn — паттерн «Отделка White Box» (2026-05-23)
+
+**Проблема:** запрос «сколько 2-комн Моисеенко 10 с чистовой отделкой» давал захардкоженный fallback от Flynn-runtime («Оставьте контакт — менеджер... свяжется с вами»), потому что RAG не находил лексического матча «чистовая» в офферах (где renovation: «черновая») и edge-function срабатывала до пользовательского промпта.
+
+**Workaround:** добавлена TEXT-карточка в `training_data` (id `add7637b-9c96-4b5d-b535-473501571686`) с:
+1. Описанием фактической отделки в каждом ЖК (Моисеенко 10 = White Box, Талант = варьируется, Остров = черновая+White Box, VIDI = черновая).
+2. Списком синонимов: «с отделкой = чистовая = под ключ = White Box = предчистовая = готовая отделка = отделка под жильё».
+3. Прямой инструкцией: «На запрос “с чистовой/с отделкой/под ключ Моисеенко” — выдай конкретные офферы с пометкой White Box + slice-URL. Не уходи в "нет данных"».
+4. Slice-URL по каждой комнатности для Моисеенко.
+
+**Результат:** теперь бот цитирует синонимы из карточки, RAG не возвращает пустоту, edge-function не срабатывает в fallback. Подтверждено на 3 формулировках:
+- «Сколько двушек в ЖК Моисеенко 10 с чистовой отделкой?» → офферы с «отделка White Box»
+- «двушки Моисеенко 10 White Box сколько» → офферы + «точное количество не зафиксировано»
+- «сколько 2-комн в Моисеенко с готовой отделкой?» → офферы с пометкой «White Box (предчистовая)»
+
+**Регрессия:** 8/10 → **10/10 PASS** после добавления карточки.
+
+### Обобщённый рецепт KB-обходки fallback Flynn
+
+Если бот возвращает фразу «Оставьте контакт — менеджер...» на запрос, где данные **есть** (но не лексически матчатся):
+
+1. Определи **разрыв терминологии** между запросом и данными в фиде/портале (например, агент говорит «чистовая», фид говорит «черновая», портал говорит «White Box»).
+2. Создай TEXT-карточку в `training_data` через PostgREST POST (`/rest/v1/training_data`), где:
+   - перечислены все альтернативные термины
+   - указан фактический термин из портала/фида
+   - дана инструкция боту, как отвечать
+   - даны slice-URL для каталога
+3. Очисти кеш индекса (кнопка в UI или подожди ребилд).
+4. Прогон через `flynn-regression-test.mjs` с **новой формулировкой** запроса (старая будет в ответном кеше). Бот теперь возвращает офферы вместо fallback.
+
+Этот паттерн универсален для любого Flynn-бота с любым «терминологическим разрывом».

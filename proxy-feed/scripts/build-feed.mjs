@@ -89,6 +89,22 @@ function priceProse(price) {
   return `цена ${mln} млн рублей, ${n.toLocaleString('ru-RU')} ₽`;
 }
 
+// Flynn retrieval is lexical — it does not parse "до 40 млн" as price≤40000000.
+// To make budget-bounded queries hit the right offers, we embed the textual price
+// bands ("до 35 млн", "до 40 млн", "до 50 млн") into description. Each offer gets
+// the next 3 round thresholds from a fixed grid, so "двушки Talento до 40 млн"
+// matches a 33.26 млн offer via the literal "до 40 млн" token.
+const PRICE_THRESHOLDS_MLN = [15, 20, 25, 30, 35, 40, 50, 60, 75, 90, 100, 110];
+function priceBandSynonyms(price) {
+  if (!price) return null;
+  const n = Number(price);
+  if (!Number.isFinite(n)) return null;
+  const mln = n / 1_000_000;
+  const bands = PRICE_THRESHOLDS_MLN.filter(t => t >= mln).slice(0, 3);
+  if (!bands.length) return null;
+  return `бюджет: ${bands.map(b => `до ${b} млн`).join(', ')}`;
+}
+
 function areaFromName(name) {
   if (!name) return null;
   const m = String(name).match(/(\d+(?:[.,]\d+)?)\s*м²/);
@@ -129,8 +145,59 @@ function renovationLabel(renovation) {
   return key ? RENOVATION_LABELS[key] : `отделка: ${renovation}`;
 }
 
+// Canonical fact-prefix concentrates top-discriminating tokens (ЖК, rooms label,
+// price, area, floor, offer id) in the first ~120 chars of <description>. BM25
+// length normalization gives early tokens disproportionate weight, and Flynn's
+// retrieval is lexical — so a dense prefix beats the same tokens spread across
+// the body. Format: `Talento • Двухкомнатная (двушка) • 33.26 млн ₽ • 72.47 м² • эт.3 • № 318152.`
+function shortRoomsTag(rooms, name) {
+  const n = parseInt(rooms, 10);
+  const map = { 0: 'Студия', 1: 'Однокомнатная (однушка)', 2: 'Двухкомнатная (двушка)', 3: 'Трёхкомнатная (трёшка)', 4: 'Четырёхкомнатная' };
+  if (!Number.isNaN(n) && map[n]) return map[n];
+  if (n >= 5) return 'Пентхаус';
+  if (name && /студи/i.test(name)) return 'Студия';
+  if (name && /пентхаус|penthouse/i.test(name)) return 'Пентхаус';
+  return null;
+}
+function shortComplexTag(buildingName) {
+  if (!buildingName) return null;
+  const n = String(buildingName).toLowerCase();
+  if (n.includes('talento')) return 'Talento';
+  if (n.includes('vidi')) return 'VIDI';
+  if (n.includes('остров')) return 'Остров Первых';
+  if (n.includes('моисеенко')) return 'Моисеенко 10';
+  return buildingName;
+}
+function shortPriceTag(price) {
+  if (!price) return null;
+  const n = Number(price);
+  if (!Number.isFinite(n)) return null;
+  const mln = (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '');
+  return `${mln} млн ₽`;
+}
+function shortAreaTag(name) {
+  if (!name) return null;
+  const m = String(name).match(/(\d+(?:[.,]\d+)?)\s*м²/);
+  if (!m) return null;
+  return `${m[1].replace(',', '.')} м²`;
+}
+function buildFactPrefix(offer) {
+  const facts = [
+    shortComplexTag(offer['building-name']),
+    shortRoomsTag(offer.rooms, offer.name),
+    shortPriceTag(offer.price),
+    shortAreaTag(offer.name),
+    offer.floor ? `эт.${offer.floor}` : null,
+    offer['@_id'] ? `№ ${offer['@_id']}` : null,
+  ].filter(Boolean);
+  return facts.length ? facts.join(' • ') : null;
+}
+
 function buildEnrichedDescription(offer) {
   const parts = [];
+
+  const factPrefix = buildFactPrefix(offer);
+  if (factPrefix) parts.push(factPrefix);
 
   const rooms = roomsLabel(offer.rooms, offer.name);
   const complex = complexLabel(offer['building-name']);
@@ -152,6 +219,9 @@ function buildEnrichedDescription(offer) {
 
   const price = priceProse(offer.price);
   if (price) parts.push(price);
+
+  const priceBand = priceBandSynonyms(offer.price);
+  if (priceBand) parts.push(priceBand);
 
   const renovation = renovationLabel(offer.renovation);
   if (renovation) parts.push(renovation);
@@ -241,7 +311,7 @@ async function checkUrl(url, cookie, { timeout = 8000 } = {}) {
     if (html.length < 10000) {
       return { ok: false, status: res.status, reason: 'empty_body', length: html.length };
     }
-    return { ok: true, status: res.status, rooms_from_title: parseRoomsFromHtmlTitle(html) };
+    return { ok: true, status: res.status, rooms_from_title: parseRoomsFromHtmlTitle(html), floor_from_page: parseFloorFromHtml(html) };
   } catch (err) {
     return { ok: false, reason: err.name === 'AbortError' ? 'timeout' : err.message };
   }
@@ -260,6 +330,20 @@ function parseRoomsFromHtmlTitle(html) {
   return null;
 }
 
+// Authoritative floor source: portal page reads "Этаж\nN из M" (label + value blocks).
+// Domoplaner's <floor> sometimes differs by ±1 (verified 19 cases in Остров Первых
+// where YML floor=2 but portal shows "Этаж 3 из 12"). Overrides take precedence.
+function parseFloorFromHtml(html) {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ');
+  const m = text.match(/Этаж\s+(\d+)\s+из\s+\d+/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 async function filterAlive(offers, cookie, { concurrency = 12 } = {}) {
   const alive = [];
   const dropped = [];
@@ -272,6 +356,9 @@ async function filterAlive(offers, cookie, { concurrency = 12 } = {}) {
       if (result.ok) {
         if (result.rooms_from_title != null) {
           offer.__rooms_from_title = result.rooms_from_title;
+        }
+        if (result.floor_from_page != null) {
+          offer.__floor_from_page = result.floor_from_page;
         }
         alive.push(offer);
       } else dropped.push({ id: offer['@_id'], url: offer.url, ...result });
@@ -322,7 +409,9 @@ async function main() {
   let enrichedCount = 0;
   let roomsNormalized = 0;
   let roomsOverriddenFromTitle = 0;
+  let floorOverriddenFromPage = 0;
   const roomsMismatches = [];
+  const floorMismatches = [];
   for (const offer of alive) {
     // Source of truth for room count: <title> on the booking.fizika.group listing page,
     // collected during URL liveness check. Domoplaner ships marketing labels
@@ -345,11 +434,34 @@ async function main() {
       offer.rooms = '0';
       roomsNormalized++;
     }
+
+    // Same logic for <floor>: portal page is authoritative. Domoplaner ships
+    // floor numbers that mismatch the portal in ~7% of offers (mainly Остров
+    // Первых корпус 2). Bot must show the floor an agent sees on the listing.
+    const pageFloor = offer.__floor_from_page;
+    if (pageFloor != null) {
+      const ymlFloor = offer.floor != null && offer.floor !== '' ? parseInt(offer.floor, 10) : null;
+      if (ymlFloor !== pageFloor) {
+        if (floorMismatches.length < 5) {
+          floorMismatches.push({ id: offer['@_id'], url: offer.url, yml: ymlFloor, page: pageFloor });
+        }
+        offer.floor = String(pageFloor);
+        floorOverriddenFromPage++;
+      }
+      delete offer.__floor_from_page;
+    }
+
     const newDescription = buildEnrichedDescription(offer);
     if (newDescription && newDescription !== offer.description) {
       offer.description = newDescription;
       enrichedCount++;
     }
+    // Keep partner-portal URL from Domoplaner as-is. Was overridden to a
+    // public Domoplaner deep-link in c925e9f for a B2C scenario; reverted
+    // 2026-05-22 because Fizika consumes this feed in a B2B agent-only
+    // chat (Flynn-ai) — the bot must cite booking.fizika.group/flat/<id>/
+    // which is the partner listing URL agents are already logged into.
+    // If a B2C variant is needed later, build a separate output.
   }
 
   // Replace offers list with the filtered set.
@@ -373,6 +485,8 @@ async function main() {
     rooms_normalized: roomsNormalized,
     rooms_overridden_from_title: roomsOverriddenFromTitle,
     rooms_mismatches_sample: roomsMismatches,
+    floor_overridden_from_page: floorOverriddenFromPage,
+    floor_mismatches_sample: floorMismatches,
     output: OUTPUT_PATH,
     bytes: out.length,
     dropped_sample: dropped.slice(0, 5),

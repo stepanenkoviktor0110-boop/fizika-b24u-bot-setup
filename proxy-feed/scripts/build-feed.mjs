@@ -314,7 +314,7 @@ async function checkUrl(url, cookie, { timeout = 8000 } = {}) {
     if (html.length < 10000) {
       return { ok: false, status: res.status, reason: 'empty_body', length: html.length };
     }
-    return { ok: true, status: res.status, rooms_from_title: parseRoomsFromHtmlTitle(html) };
+    return { ok: true, status: res.status, rooms_from_title: parseRoomsFromHtmlTitle(html), floor_from_page: parseFloorFromHtml(html) };
   } catch (err) {
     return { ok: false, reason: err.name === 'AbortError' ? 'timeout' : err.message };
   }
@@ -333,6 +333,20 @@ function parseRoomsFromHtmlTitle(html) {
   return null;
 }
 
+// Authoritative floor source: portal page reads "Этаж\nN из M" (label + value blocks).
+// Domoplaner's <floor> sometimes differs by ±1 (verified 19 cases in Остров Первых
+// where YML floor=2 but portal shows "Этаж 3 из 12"). Overrides take precedence.
+function parseFloorFromHtml(html) {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ');
+  const m = text.match(/Этаж\s+(\d+)\s+из\s+\d+/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 async function filterAlive(offers, cookie, { concurrency = 12 } = {}) {
   const alive = [];
   const dropped = [];
@@ -345,6 +359,9 @@ async function filterAlive(offers, cookie, { concurrency = 12 } = {}) {
       if (result.ok) {
         if (result.rooms_from_title != null) {
           offer.__rooms_from_title = result.rooms_from_title;
+        }
+        if (result.floor_from_page != null) {
+          offer.__floor_from_page = result.floor_from_page;
         }
         alive.push(offer);
       } else dropped.push({ id: offer['@_id'], url: offer.url, ...result });
@@ -395,7 +412,9 @@ async function main() {
   let enrichedCount = 0;
   let roomsNormalized = 0;
   let roomsOverriddenFromTitle = 0;
+  let floorOverriddenFromPage = 0;
   const roomsMismatches = [];
+  const floorMismatches = [];
   for (const offer of alive) {
     // Source of truth for room count: <title> on the booking.fizika.group listing page,
     // collected during URL liveness check. Domoplaner ships marketing labels
@@ -418,6 +437,23 @@ async function main() {
       offer.rooms = '0';
       roomsNormalized++;
     }
+
+    // Same logic for <floor>: portal page is authoritative. Domoplaner ships
+    // floor numbers that mismatch the portal in ~7% of offers (mainly Остров
+    // Первых корпус 2). Bot must show the floor an agent sees on the listing.
+    const pageFloor = offer.__floor_from_page;
+    if (pageFloor != null) {
+      const ymlFloor = offer.floor != null && offer.floor !== '' ? parseInt(offer.floor, 10) : null;
+      if (ymlFloor !== pageFloor) {
+        if (floorMismatches.length < 5) {
+          floorMismatches.push({ id: offer['@_id'], url: offer.url, yml: ymlFloor, page: pageFloor });
+        }
+        offer.floor = String(pageFloor);
+        floorOverriddenFromPage++;
+      }
+      delete offer.__floor_from_page;
+    }
+
     const newDescription = buildEnrichedDescription(offer);
     if (newDescription && newDescription !== offer.description) {
       offer.description = newDescription;
@@ -452,6 +488,8 @@ async function main() {
     rooms_normalized: roomsNormalized,
     rooms_overridden_from_title: roomsOverriddenFromTitle,
     rooms_mismatches_sample: roomsMismatches,
+    floor_overridden_from_page: floorOverriddenFromPage,
+    floor_mismatches_sample: floorMismatches,
     output: OUTPUT_PATH,
     bytes: out.length,
     dropped_sample: dropped.slice(0, 5),

@@ -75,7 +75,13 @@ function parsePortal(html) {
 
 function normComplex(s) {
   if (!s) return '';
-  return String(s).toLowerCase().replace(/жк\s+/g, '').replace(/[^a-zа-я0-9]/gi, '');
+  // Portal extends some complex names with a suffix ("VIDI" → "VIDI апартаменты").
+  // Treat suffix variants as equivalent so cosmetic differences don't surface as mismatches.
+  return String(s)
+    .toLowerCase()
+    .replace(/жк\s+/g, '')
+    .replace(/\s+(апартаменты|апарт|резиденции?)$/i, '')
+    .replace(/[^a-zа-я0-9]/gi, '');
 }
 
 function classifyMismatch(offer, portal) {

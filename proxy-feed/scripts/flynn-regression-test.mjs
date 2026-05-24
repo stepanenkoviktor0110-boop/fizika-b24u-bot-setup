@@ -51,6 +51,12 @@ const TESTS = [
   { id: 'C4', q: 'сколько студий в Острове Первых', expect: { hasUrl: true } },
   // Bot may return individual flat URLs in /flat/<id>/ instead of catalog slice — both are valid.
   { id: 'KRL', q: 'студии Острова Первых каталог', expect: { hasUrl: true, mustContain: ['booking.fizika.group'] } },
+  // One-criterion queries (fixed via KB «что есть / варианты» — id 22d749e3-...)
+  { id: 'O1', q: 'что есть в Talento до 40 млн?', expect: { hasUrl: true, mustNotContain: ['оставьте контакт', 'свяжется с вами'] } },
+  { id: 'O2', q: 'до 40 млн', expect: { hasUrl: true, mustNotContain: ['оставьте контакт'] } },
+  { id: 'O3', q: '1-комн', expect: { hasUrl: true, mustNotContain: ['оставьте контакт'] } },
+  { id: 'O4', q: '70 м2', expect: { hasUrl: true, mustNotContain: ['оставьте контакт'] } },
+  { id: 'O5', q: 'Talento', expect: { hasUrl: true, mustNotContain: ['оставьте контакт'] } },
 ];
 
 async function main() {

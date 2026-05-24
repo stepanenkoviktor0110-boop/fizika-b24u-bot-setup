@@ -1,7 +1,36 @@
-# fizika-b24u-bot-setup
+# fizika-flynn-bot-setup
 
-Domoplaner YML feed proxy for the [B24U](https://b24u.ru) AI assistant on
-[booking.fizika.group](https://booking.fizika.group).
+YML feed proxy + Flynn-AI chatbot setup для [booking.fizika.group](https://booking.fizika.group).
+Изначально настраивался под B24U, с 2026-05 мигрирован на Flynn-AI.
+
+## Структура
+
+| Путь | Что |
+|---|---|
+| `proxy-feed/scripts/build-feed.mjs` | Главный билдер YML-фида |
+| `proxy-feed/scripts/*.mjs` | Аудит, регрессии, верификация (см. `docs/scripts.md`) |
+| `proxy-feed/answer-from-feed.mjs` | Детерминированный ответчик по фиду (без LLM) |
+| `.github/workflows/build-feed.yml` | Cron каждые 6 часов → публикация в `gh-pages` |
+| `docs/rag-bot-setup-principles.md` | Универсальные принципы настройки RAG-чатбота |
+| `docs/flynn-bot-repair-prompt.md` | Self-contained инструкция для починки Flynn-бота другого клиента |
+| `docs/scripts.md` | Описание всех диагностических скриптов |
+| `clients/fizika/baseline-2026-05-24.md` | **Финальный snapshot Fizika** |
+| `clients/fizika/findings-llm-hallucination-2026-05-24.md` | Главная находка: Flynn-LLM галлюцинирует |
+| `clients/fizika/flynn-prompt-patterns.md` | Промпт-паттерны для Fizika |
+| `clients/fizika/flynn-dashboard-checklist.md` | Чек-лист действий в кабинете Flynn |
+| `clients/fizika/snapshots/*` | Snapshots до каждой деструктивной правки |
+
+## Быстрый старт
+
+- Текущее состояние клиента → `clients/fizika/baseline-2026-05-24.md`
+- Для нового клиента → `docs/rag-bot-setup-principles.md`
+- Починка Flynn-бота другого клиента → `docs/flynn-bot-repair-prompt.md`
+
+---
+
+## Legacy: feed-proxy для B24U (изначальная задача)
+
+Описание оставлено для исторического контекста — Flynn-runtime использует тот же фид без изменений.
 
 ## What this does
 

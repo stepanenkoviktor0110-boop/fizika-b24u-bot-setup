@@ -204,6 +204,15 @@ function buildEnrichedDescription(offer) {
   const factPrefix = buildFactPrefix(offer);
   if (factPrefix) parts.push(factPrefix);
 
+  // Anchor the listing URL inside the description so the LLM cannot pair
+  // a description from one offer with a URL from another (verified failure
+  // mode 2026-05-24: bot said "Talento, №29, 33.3 млн" but URL pointed to
+  // /flat/4291/ which is actually "Остров №131, 37.7 млн"). When URL lives
+  // only in <url> field, RAG returns description and URL as separate tokens
+  // and the model picks them independently. Embedding URL into the same
+  // text block forces them to travel together.
+  if (offer.url) parts.push(`URL этого лота: ${offer.url}`);
+
   const rooms = roomsLabel(offer.rooms, offer.name);
   const complex = complexLabel(offer['building-name']);
   if (rooms && complex) {

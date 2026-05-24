@@ -182,13 +182,18 @@ function shortAreaTag(name) {
   return `${m[1].replace(',', '.')} м²`;
 }
 function buildFactPrefix(offer) {
+  // Apartment number: prefer real portal number (e.g. №29 from title), fall back
+  // to CRM offer id only when title parse failed (no liveness check / dead page).
+  // Agents search/cite by portal number, not by CRM id — see snapshot 2026-05-24.
+  const aptNum = offer.__apt_number;
+  const idLabel = aptNum ? `кв. №${aptNum}` : (offer['@_id'] ? `арт. ${offer['@_id']}` : null);
   const facts = [
     shortComplexTag(offer['building-name']),
     shortRoomsTag(offer.rooms, offer.name),
     shortPriceTag(offer.price),
     shortAreaTag(offer.name),
     offer.floor ? `эт.${offer.floor}` : null,
-    offer['@_id'] ? `№ ${offer['@_id']}` : null,
+    idLabel,
   ].filter(Boolean);
   return facts.length ? facts.join(' • ') : null;
 }
@@ -311,7 +316,7 @@ async function checkUrl(url, cookie, { timeout = 8000 } = {}) {
     if (html.length < 10000) {
       return { ok: false, status: res.status, reason: 'empty_body', length: html.length };
     }
-    return { ok: true, status: res.status, rooms_from_title: parseRoomsFromHtmlTitle(html), floor_from_page: parseFloorFromHtml(html) };
+    return { ok: true, status: res.status, rooms_from_title: parseRoomsFromHtmlTitle(html), floor_from_page: parseFloorFromHtml(html), apt_number_from_title: parseAptNumberFromTitle(html) };
   } catch (err) {
     return { ok: false, reason: err.name === 'AbortError' ? 'timeout' : err.message };
   }
@@ -344,6 +349,17 @@ function parseFloorFromHtml(html) {
   return m ? parseInt(m[1], 10) : null;
 }
 
+// Apartment number as printed on the portal title: «Студия, №29. Talento».
+// Agents search by this number (visible in floor plans / шахматка), not by the
+// CRM offer id (318156). Override CRM id with apt number in the fact-prefix
+// so the bot cites №29 instead of №318156.
+function parseAptNumberFromTitle(html) {
+  const m = html.match(/<title>([^<]+)<\/title>/i);
+  if (!m) return null;
+  const num = m[1].match(/№\s*(\d+)/);
+  return num ? num[1] : null;
+}
+
 async function filterAlive(offers, cookie, { concurrency = 12 } = {}) {
   const alive = [];
   const dropped = [];
@@ -359,6 +375,9 @@ async function filterAlive(offers, cookie, { concurrency = 12 } = {}) {
         }
         if (result.floor_from_page != null) {
           offer.__floor_from_page = result.floor_from_page;
+        }
+        if (result.apt_number_from_title != null) {
+          offer.__apt_number = result.apt_number_from_title;
         }
         alive.push(offer);
       } else dropped.push({ id: offer['@_id'], url: offer.url, ...result });
@@ -456,6 +475,9 @@ async function main() {
       offer.description = newDescription;
       enrichedCount++;
     }
+    // Strip the temporary __apt_number marker so it does not leak into XML output.
+    delete offer.__apt_number;
+
     // Keep partner-portal URL from Domoplaner as-is. Was overridden to a
     // public Domoplaner deep-link in c925e9f for a B2C scenario; reverted
     // 2026-05-22 because Fizika consumes this feed in a B2B agent-only

@@ -1,0 +1,13 @@
+{
+  "_note": "Full snapshot перед откатом антипаттерна. Все KB-записи и системный промпт по состоянию на 2026-05-24 ~05:00 UTC. Используется как rollback-источник, если переход на структурную логику что-то сломает.",
+  "widget_settings_id": "a46ab631-ef8a-44b4-94f6-30e041f0bca7",
+  "project_id": "c23660f9-0402-47a4-b0fd-2c38f26950f7",
+  "actions_to_revert_if_needed": [
+    "DELETE training_data id=2e83c642-7998-49fe-8019-631730b5fb39 (антипаттерн-карточка «один критерий» с синонимами)",
+    "PATCH training_data id=add7637b-... (переписать White Box на чистые данные)",
+    "PATCH widget_settings.system_prompt (новая структурная логика)"
+  ],
+  "kb_count_before": 14,
+  "system_prompt_chars_before": 3422,
+  "rollback_full_state": "См. фактический snapshot в разговоре чата от 2026-05-24 04:55 (тот, где widget_settings и kb отдаются POST-запросом). При необходимости откатить — взять оттуда content/system_prompt полей."
+}

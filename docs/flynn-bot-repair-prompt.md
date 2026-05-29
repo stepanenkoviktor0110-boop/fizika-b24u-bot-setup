@@ -222,6 +222,27 @@ curl -X PATCH 'https://flynn-ai.ru/rest/v1/widget_settings?project_id=eq.<PROJEC
   -d '{"system_prompt":"<полный текст промпта по шаблону>"}'
 ```
 
+### 4.3a. Настроить контекстное приветствие
+
+Имя бота и текст приветствия — отдельные поля `widget_settings`, НЕ системный промпт. Дефолт Flynn — безликое «Здравствуйте! Чем могу помочь?», его надо заменить (см. Принцип 6 в `rag-bot-setup-principles.md`).
+
+Прочитать текущие (публично, без токена — это то, что видит виджет):
+```bash
+curl -s 'https://yngogqokndrgmyhidxor.supabase.co/functions/v1/widget-settings?key=<API_KEY>'
+# вернёт assistant_name, welcome_message, quick_buttons, funnel_*, ...
+```
+
+Записать имя + приветствие (PATCH с токеном, как промпт):
+```bash
+curl -X PATCH 'https://flynn-ai.ru/rest/v1/widget_settings?project_id=eq.<PROJECT_ID>' \
+  -H "apikey: $APIKEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  -d '{"assistant_name":"<имя под нишу, напр. Мила>","welcome_message":"<кто я + чем полезен под нишу клиента>"}'
+```
+
+Тон приветствия — информативный. Продажи закрывает воронка (`funnel_enabled`, `funnel_goal`, `funnel_contact_cta`), не приветствие. Имя подбирает сетапер под нишу/аудиторию; клиент может поменять в кабинете.
+
 ### 4.4. Очистить кеш индекса
 
 В кабинете Flynn → Обучение ИИ → База знаний → **Очистить кеш**. Через API кнопки нет (известное ограничение).

@@ -6,7 +6,7 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
   push:
-    branches: [main, dev]
+    branches: [flynn-settings, main, dev]
     paths:
       - 'proxy-feed/**'
       - '.github/workflows/build-feed.yml'
@@ -39,6 +39,7 @@ jobs:
       - name: Build feed
         working-directory: proxy-feed
         env:
+          FEED_SOURCE_URL: ${{ secrets.FEED_SOURCE_URL }}
           BOOKING_FIZIKA_LOGIN: ${{ secrets.BOOKING_FIZIKA_LOGIN }}
           BOOKING_FIZIKA_PASSWORD: ${{ secrets.BOOKING_FIZIKA_PASSWORD }}
         run: npm run build

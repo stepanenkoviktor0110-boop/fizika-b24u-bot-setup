@@ -4,8 +4,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SOURCE_URL = process.env.FEED_SOURCE_URL
-  ?? 'https://domoplaner.ru/dc-api/feeds/424-NvLi2AAieHuU8GCndxIPl0V34A10ijt0CbZbZKuMWhUzkkxnRp4NtLAgO7DN0c8H/';
+// Domoplaner feed URL carries a per-partner access token and is rotated by the
+// provider — keep it in the FEED_SOURCE_URL secret/env, never hardcoded here
+// (this repo is public). Missing config fails loudly in loadFeed().
+const SOURCE_URL = process.env.FEED_SOURCE_URL ?? null;
 const LOCAL_PATH = resolve(__dirname, '../../old/artifacts/domoplaner-feed-original-2026-05-09.yml');
 const OUTPUT_PATH = resolve(__dirname, '../../public/feed.xml');
 
@@ -262,6 +264,9 @@ function buildEnrichedDescription(offer) {
 async function loadFeed() {
   if (process.env.LOCAL === '1') {
     return await readFile(LOCAL_PATH, 'utf8');
+  }
+  if (!SOURCE_URL) {
+    throw new Error('FEED_SOURCE_URL is not set — provide the Domoplaner feed URL via the FEED_SOURCE_URL secret/env.');
   }
   const res = await fetch(SOURCE_URL, { headers: { 'User-Agent': 'fizika-feed-proxy/1.0' } });
   if (!res.ok) throw new Error(`Source feed fetch failed: ${res.status} ${res.statusText}`);
